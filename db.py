@@ -41,6 +41,15 @@ class ChromaDBManager:
             metadatas=metadatas
         )
 
+    def delete_by_ids(self, ids: List[str]):
+        """
+        Deletes vectors from the ChromaDB collection by their IDs.
+        Silently ignores IDs that don't exist.
+        """
+        if not ids:
+            return
+        self.collection.delete(ids=ids)
+
     def query(self, query_embedding: List[float], n_results: int = 5):
         """
         Queries the ChromaDB collection using a query embedding.

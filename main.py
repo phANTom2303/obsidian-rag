@@ -1,72 +1,128 @@
-from chunking import chunk_file
-from vectorize import Vectorizer
+"""
+main.py — Obsidian RAG entry point
+
+Modes
+-----
+ingest <path>   Ingest a file or directory into ChromaDB (manual mode).
+chat            Interactive query/response loop against the indexed vault.
+"""
+
+import sys
+import os
+
 from db import ChromaDBManager
-from retrieve_chunks import Retriever
+from file_tracker import FileTracker
 from llm_generator import LLMGenerator
-import pprint
+from retrieve_chunks import Retriever
+from vectorize import Vectorizer
 
 
-def main():
-    path = "/home/anish-goenka/Documents/obsidian-vault-current/cp-algorithms.com/graph/depth-first-search.md"
-    print("Initializing Vectorizer (this may download the model on first run)...")
+# ---------------------------------------------------------------------------
+# Shared initialisation
+# ---------------------------------------------------------------------------
+
+_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tracker.db")
+
+
+def _build_components():
+    """Initialise and return the shared vectorizer, ChromaDB manager, and retriever."""
+    print("Initializing vectorizer (may download model on first run)...")
     vectorizer = Vectorizer()
-    print("\nInitializing ChromaDB Manager...")
-    db_manager = ChromaDBManager(persist_directory="chroma_db", collection_name="obsidian_notes")
-    retriever = Retriever(vectorizer=vectorizer, db_manager=db_manager)
-    
-    # print("Chunking document...")
-    # try:
-    #     chunks = chunk_file(path)
-    #     pprint.pprint(chunks)
-    # except FileNotFoundError:
-    #     print(f"File not found: {path}")
-    #     print("Please provide a valid markdown file path to test.")
-    #     return
-        
-    # print(f"Generated {len(chunks)} chunks.")
-    
-    # print(f"Vectorizing chunks...")
-    # vectorized_data = vectorizer.vectorize_chunks(chunks)
-    
-    # print("\nVectorization complete. Output (Sample first chunk):")
-    # if vectorized_data:
-    #     pprint.pprint([vectorized_data[0]])
-        
-    
-    # print("Upserting vectors into ChromaDB...")
-    # db_manager.upsert_vectors(vectorized_data)
-    
-    # print("Successfully upserted data to ChromaDB at ./chroma_db")
 
-    userQuery = "how to find lowest common ancestor"
-    
-    print(f"\nQuerying for: '{userQuery}'")
-    
+    print("Initializing ChromaDB...")
+    db_manager = ChromaDBManager(persist_directory="chroma_db", collection_name="obsidian_notes")
+
+    retriever = Retriever(vectorizer=vectorizer, db_manager=db_manager)
+    return vectorizer, db_manager, retriever
+
+
+# ---------------------------------------------------------------------------
+# Ingest mode
+# ---------------------------------------------------------------------------
+
+def run_ingest(path: str):
+    """
+    Manual ingest mode (plan §10).
+
+    If *path* is a file, ingest that single .md file.
+    If *path* is a directory, recursively walk it and ingest all .md files,
+    skipping unchanged files via two-layer change detection (mtime → SHA-256).
+    """
+    vectorizer, db_manager, _ = _build_components()
+
+    tracker = FileTracker(
+        db_path=_DB_PATH,
+        chroma_manager=db_manager,
+        vectorizer=vectorizer,
+    )
+
+    print(f"\nStarting ingest for: {path}\n")
+    tracker.ingest_path(path)
+
+
+# ---------------------------------------------------------------------------
+# Chat mode
+# ---------------------------------------------------------------------------
+
+def run_chat():
+    """Interactive query loop against the already-indexed vault."""
+    _, _, retriever = _build_components()
     llm = LLMGenerator()
 
-    # 1. Generate alternative queries
-    print("\nGenerating alternative queries for multi-query retrieval...")
-    queries = llm.generate_alternative_queries(userQuery, num_queries=3)
-    for i, q in enumerate(queries):
-        print(f"Query {i+1}: {q}")
-        
-    # 2. Retrieve chunks with RRF
-    print("\nRetrieving chunks using Reciprocal Rank Fusion (RRF)...")
-    top_chunks = retriever.retrieve_with_rrf(queries, k=5)
-    
-    # Optional: Pretty print the returned chunks
-    # print("\n--- RRF Search Results ---")
-    # pprint.pprint(top_chunks)
-    
-    # 3. Generate response using LLM
-    print("\nGenerating final LLM Response...")
-    response = llm.generate_response(userQuery, top_chunks)
-    
-    print("\n" + "="*50)
-    print("LLM RESPONSE")
-    print("="*50)
-    print(response)
-    print("="*50 + "\n")
-    
+    print("\nObsidian RAG — Chat mode. Type 'exit' to quit.\n")
+    while True:
+        try:
+            user_query = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            break
+
+        if not user_query or user_query.lower() in {"exit", "quit"}:
+            print("Goodbye.")
+            break
+
+        print("\nGenerating alternative queries...")
+        queries = llm.generate_alternative_queries(user_query, num_queries=3)
+
+        print("Retrieving relevant chunks (RRF)...")
+        top_chunks = retriever.retrieve_with_rrf(queries, k=5)
+
+        print("Generating response...\n")
+        response = llm.generate_response(user_query, top_chunks)
+
+        print("=" * 60)
+        print(response)
+        print("=" * 60 + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def _usage():
+    print(__doc__)
+    print("Usage:")
+    print("  python main.py ingest <path>")
+    print("  python main.py chat")
+    sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 2:
+        _usage()
+
+    command = sys.argv[1].lower()
+
+    if command == "ingest":
+        if len(sys.argv) < 3:
+            print("Error: 'ingest' requires a path argument.")
+            _usage()
+        ingest_path = sys.argv[2]
+        run_ingest(ingest_path)
+
+    elif command == "chat":
+        run_chat()
+
+    else:
+        print(f"Unknown command: {command!r}")
+        _usage()

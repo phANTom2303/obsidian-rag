@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from sentence_transformers import SentenceTransformer
+from file_tracker import make_chunk_id
 
 class Vectorizer:
     def __init__(self, model_name: str = "nomic-ai/nomic-embed-text-v1.5"):
@@ -25,11 +26,11 @@ class Vectorizer:
         vectorized_dataset = []
         for i, chunk in enumerate(chunks):
             metadata = chunk.get("metadata", {})
-            file_name = metadata.get("file_name", "unknown")
+            file_path = metadata.get("file_path", "")
             chunk_number = metadata.get("chunk_number", i + 1)
-            
+
             vectorized_dataset.append({
-                "id": f"{file_name}_chunk_{chunk_number}",
+                "id": make_chunk_id(file_path, chunk_number),
                 "document": chunk["page_content"],
                 "embedding": document_embeddings[i].tolist(), # Convert numpy array to list
                 "metadata": metadata
