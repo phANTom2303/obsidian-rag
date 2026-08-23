@@ -52,6 +52,37 @@ class LLMGenerator:
         )
         
         return interaction.output_text
+
+    def generate_alternative_queries(self, original_query: str, num_queries: int = 3) -> List[str]:
+        """
+        Generates alternative queries from the original user query for multi-query retrieval.
+        """
+        prompt = (
+            f"You are an AI language model assistant. Your task is to generate {num_queries} "
+            f"different versions of the given user query to retrieve relevant documents from a vector database. "
+            f"By generating multiple perspectives on the user query, your goal is to help the user overcome "
+            f"some of the limitations of the distance-based similarity search. "
+            f"Provide these alternative questions separated by newlines, with no extra formatting or numbered lists.\n"
+            f"Original query: {original_query}"
+        )
+        
+        interaction = self.client.interactions.create(
+            model=self.model_name,
+            input=prompt,
+            generation_config={
+                "temperature": self.temperature,
+                "max_output_tokens": self.max_output_tokens,
+                "top_p": self.top_p
+            }
+        )
+        
+        # Parse the output into a list of queries
+        queries = interaction.output_text.strip().split('\n')
+        # Clean up any potential empty strings or leading/trailing spaces
+        queries = [q.strip() for q in queries if q.strip()]
+        
+        # Prepend original query to ensure it's always included in retrieval
+        return [original_query] + queries[:num_queries]
         
     def _format_chunks(self, chunks: List[Dict[str, Any]]) -> str:
         """

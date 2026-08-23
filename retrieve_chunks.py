@@ -42,6 +42,7 @@ class Retriever:
             documents = results["documents"][0]
             metadatas = results.get("metadatas", [[]])[0]
             distances = results.get("distances", [[]])[0]
+            ids = results.get("ids", [[]])[0]
             
             for i in range(len(documents)):
                 meta = metadatas[i].copy() if i < len(metadatas) and metadatas[i] else {}
@@ -49,12 +50,51 @@ class Retriever:
                 if i < len(distances):
                     meta["distance"] = distances[i]
                     
+                chunk_id = ids[i] if i < len(ids) else f"chunk_{i}"
+                    
                 retrieved_chunks.append({
+                    "id": chunk_id,
                     "page_content": documents[i],
                     "metadata": meta
                 })
                 
         return retrieved_chunks
+
+    def retrieve_with_rrf(self, queries: List[str], k: int = 5, rrf_k: int = 60) -> List[Dict[str, Any]]:
+        """
+        Retrieves chunks for multiple queries and fuses the results using Reciprocal Rank Fusion (RRF).
+        """
+        all_results = []
+        for query in queries:
+            chunks = self.retrieve_chunks(query, k=k)
+            all_results.append(chunks)
+
+        fused_scores = {}
+        chunk_map = {}
+        
+        for chunk_list in all_results:
+            for rank, chunk in enumerate(chunk_list):
+                chunk_id = chunk["id"]
+                
+                if chunk_id not in fused_scores:
+                    fused_scores[chunk_id] = 0
+                    chunk_map[chunk_id] = chunk
+                    
+                fused_scores[chunk_id] += 1 / (rank + 1 + rrf_k)
+                
+        # Sort chunks by their RRF score in descending order
+        reranked_results = [
+            (chunk_map[chunk_id], score) 
+            for chunk_id, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+        ]
+        
+        # Return top-k chunks, including the score in metadata
+        final_chunks = []
+        for chunk, score in reranked_results[:k]:
+            chunk["metadata"]["rrf_score"] = score
+            final_chunks.append(chunk)
+            
+        return final_chunks
 
 # Example usage
 if __name__ == "__main__":

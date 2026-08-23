@@ -38,20 +38,28 @@ def main():
     
     # print("Successfully upserted data to ChromaDB at ./chroma_db")
 
+    userQuery = "how to find lowest common ancestor"
     
-    userQuery = "What is time complexity of depth first searh"
-    print(f"\nQuerying ChromaDB for: '{userQuery}'")
+    print(f"\nQuerying for: '{userQuery}'")
     
-    # 1. Retrieve chunks
-    top_chunks = retriever.retrieve_chunks(userQuery, k=5)
+    llm = LLMGenerator()
+
+    # 1. Generate alternative queries
+    print("\nGenerating alternative queries for multi-query retrieval...")
+    queries = llm.generate_alternative_queries(userQuery, num_queries=3)
+    for i, q in enumerate(queries):
+        print(f"Query {i+1}: {q}")
+        
+    # 2. Retrieve chunks with RRF
+    print("\nRetrieving chunks using Reciprocal Rank Fusion (RRF)...")
+    top_chunks = retriever.retrieve_with_rrf(queries, k=5)
     
-    # 2. Pretty print the returned chunks (optional now)
-    # print("\n--- Search Results ---")
+    # Optional: Pretty print the returned chunks
+    # print("\n--- RRF Search Results ---")
     # pprint.pprint(top_chunks)
     
     # 3. Generate response using LLM
-    print("\nGenerating LLM Response...")
-    llm = LLMGenerator()
+    print("\nGenerating final LLM Response...")
     response = llm.generate_response(userQuery, top_chunks)
     
     print("\n" + "="*50)
