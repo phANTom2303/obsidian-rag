@@ -1,4 +1,5 @@
 import os
+import re
 from typing import List, Dict, Any
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -21,11 +22,16 @@ def chunk_file(file_path: str, chunk_size: int = 1000, chunk_overlap: int = 200)
         
     file_name = os.path.basename(file_path)
     
+    # Extract codeblocks and replace them with placeholders to prevent splitting
+    codeblocks = {}
+    def repl(match):
+        uid = f"__CODEBLOCK_{len(codeblocks)}__"
+        codeblocks[uid] = match.group(0)
+        return uid
+        
+    text_with_placeholders = re.sub(r'```.*?```', repl, text, flags=re.DOTALL)
+    
     # Hierarchy list of separators designed to respect markdown structure.
-    # Placing the code block delimiter `\n```\n` before smaller elements like `\n\n`
-    # or `\n` instructs the RecursiveCharacterTextSplitter to split around code blocks 
-    # instead of inside them, keeping a single codeblock completely present in a 
-    # single chunk (provided the codeblock is within the chunk_size limit).
     separators = [
         "\n# ",       # Heading 1
         "\n## ",      # Heading 2
@@ -34,7 +40,6 @@ def chunk_file(file_path: str, chunk_size: int = 1000, chunk_overlap: int = 200)
         "\n##### ",   # Heading 5
         "\n###### ",  # Heading 6
         "\n---",      # Horizontal rules
-        "\n```\n",    # Codeblocks
         "\n\n",       # Paragraphs
         "\n- ",       # Unordered lists
         "\n* ",       # Unordered lists
@@ -53,9 +58,25 @@ def chunk_file(file_path: str, chunk_size: int = 1000, chunk_overlap: int = 200)
         is_separator_regex=False
     )
     
-    # Generate the chunks
-    raw_chunks = splitter.split_text(text)
+    # Generate the chunks using text with placeholders
+    raw_chunks_with_placeholders = splitter.split_text(text_with_placeholders)
     
+    raw_chunks = []
+    used_placeholders = set()
+    
+    for chunk in raw_chunks_with_placeholders:
+        # Restore codeblocks, ensuring each is only included once
+        for uid, codeblock in codeblocks.items():
+            if uid in chunk:
+                if uid not in used_placeholders:
+                    chunk = chunk.replace(uid, codeblock)
+                    used_placeholders.add(uid)
+                else:
+                    chunk = chunk.replace(uid, "")
+        
+        if chunk.strip():
+            raw_chunks.append(chunk)
+            
     chunks = []
     # Inject metadata into each chunk
     for i, content in enumerate(raw_chunks):
