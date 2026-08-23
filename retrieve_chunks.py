@@ -4,19 +4,25 @@ from vectorize import Vectorizer
 from db import ChromaDBManager
 
 class Retriever:
-    def __init__(self, persist_directory: str = "chroma_db", collection_name: str = "obsidian_notes"):
+    def __init__(self, vectorizer: Vectorizer = None, db_manager: ChromaDBManager = None, persist_directory: str = "chroma_db", collection_name: str = "obsidian_notes"):
         """
         Initializes the retriever with the vectorizer and ChromaDB manager.
         This avoids reloading the embedding model on every query.
         """
-        print("Loading embedding model...")
-        self.vectorizer = Vectorizer()
-        
-        print("Connecting to ChromaDB...")
-        self.db_manager = ChromaDBManager(
-            persist_directory=persist_directory, 
-            collection_name=collection_name
-        )
+        if vectorizer is not None:
+            self.vectorizer = vectorizer
+        else:
+            print("Loading embedding model...")
+            self.vectorizer = Vectorizer()
+            
+        if db_manager is not None:
+            self.db_manager = db_manager
+        else:
+            print("Connecting to ChromaDB...")
+            self.db_manager = ChromaDBManager(
+                persist_directory=persist_directory, 
+                collection_name=collection_name
+            )
         
     def retrieve_chunks(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """
@@ -28,6 +34,7 @@ class Retriever:
         
         # 2. Make vector search in ChromaDB
         results = self.db_manager.query(query_embedding, n_results=k)
+        
         
         # 3. Format the returned chunks
         retrieved_chunks = []
