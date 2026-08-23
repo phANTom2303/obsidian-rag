@@ -2,6 +2,7 @@ from chunking import chunk_file
 from vectorize import Vectorizer
 from db import ChromaDBManager
 from retrieve_chunks import Retriever
+from llm_generator import LLMGenerator
 import pprint
 
 
@@ -44,9 +45,20 @@ def main():
     # 1. Retrieve chunks
     top_chunks = retriever.retrieve_chunks(userQuery, k=5)
     
-    # 2. Pretty print the returned chunks
-    print("\n--- Search Results ---")
-    pprint.pprint(top_chunks)
+    # 2. Pretty print the returned chunks (optional now)
+    # print("\n--- Search Results ---")
+    # pprint.pprint(top_chunks)
+    
+    # 3. Generate response using LLM
+    print("\nGenerating LLM Response...")
+    llm = LLMGenerator()
+    response = llm.generate_response(userQuery, top_chunks)
+    
+    print("\n" + "="*50)
+    print("LLM RESPONSE")
+    print("="*50)
+    print(response)
+    print("="*50 + "\n")
     
 if __name__ == "__main__":
     main()
