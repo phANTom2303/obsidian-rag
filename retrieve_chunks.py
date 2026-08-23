@@ -1,4 +1,5 @@
 import os
+import pprint
 from typing import List, Dict, Any
 from vectorize import Vectorizer
 from db import ChromaDBManager
@@ -23,7 +24,7 @@ class Retriever:
                 persist_directory=persist_directory, 
                 collection_name=collection_name
             )
-        
+            
     def retrieve_chunks(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """
         Takes a string query, converts it into vector embeddings, 
@@ -34,7 +35,6 @@ class Retriever:
         
         # 2. Make vector search in ChromaDB
         results = self.db_manager.query(query_embedding, n_results=k)
-        
         
         # 3. Format the returned chunks
         retrieved_chunks = []
