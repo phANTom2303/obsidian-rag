@@ -172,10 +172,23 @@ class FileTracker:
         """
         found = []
         for path in Path(root).rglob("*.md"):
-            # Exclude configured directories anywhere in the path
-            if any(part in self.excluded_dirs for part in path.parts):
+            # Resolve symlinks early so every subsequent check operates on
+            # the real path.  Also silently skip broken symlinks.
+            try:
+                abs_path = str(path.resolve(strict=True))
+            except OSError:
                 continue
-            abs_path = str(path.resolve())
+
+            # Skip hidden files and directories (names starting with '.')
+            # anywhere in the *resolved* absolute path components.
+            parts = Path(abs_path).parts
+            if any(part.startswith(".") for part in parts):
+                continue
+
+            # Exclude configured directories anywhere in the path
+            if any(part in self.excluded_dirs for part in parts):
+                continue
+
             if os.path.getsize(abs_path) < self.min_file_bytes:
                 continue
             found.append(abs_path)

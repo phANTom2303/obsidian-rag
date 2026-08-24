@@ -10,6 +10,7 @@ chat            Interactive query/response loop against the indexed vault.
 import sys
 import os
 
+from conversation_manager import ConversationManager
 from db import ChromaDBManager
 from file_tracker import FileTracker
 from llm_generator import LLMGenerator
@@ -42,7 +43,7 @@ def _build_components():
 
 def run_ingest(path: str):
     """
-    Manual ingest mode (plan §10).
+    Manual ingest mode.
 
     If *path* is a file, ingest that single .md file.
     If *path* is a directory, recursively walk it and ingest all .md files,
@@ -65,9 +66,16 @@ def run_ingest(path: str):
 # ---------------------------------------------------------------------------
 
 def run_chat():
-    """Interactive query loop against the already-indexed vault."""
+    """Interactive query loop against the already-indexed vault.
+
+    The console is a thin UI layer: it captures input, hands it to the
+    ``ConversationManager``, and prints the result.  All routing, history
+    management, and retrieval logic lives inside the manager.
+    """
     _, _, retriever = _build_components()
     llm = LLMGenerator()
+
+    manager = ConversationManager(llm=llm, retriever=retriever)
 
     print("\nObsidian RAG — Chat mode. Type 'exit' to quit.\n")
     while True:
@@ -81,16 +89,9 @@ def run_chat():
             print("Goodbye.")
             break
 
-        print("\nGenerating alternative queries...")
-        queries = llm.generate_alternative_queries(user_query, num_queries=3)
+        response = manager.process_message(user_query)
 
-        print("Retrieving relevant chunks (RRF)...")
-        top_chunks = retriever.retrieve_with_rrf(queries, k=5)
-
-        print("Generating response...\n")
-        response = llm.generate_response(user_query, top_chunks)
-
-        print("=" * 60)
+        print("\n" + "=" * 60)
         print(response)
         print("=" * 60 + "\n")
 
